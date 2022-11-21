@@ -1,3 +1,39 @@
+# 2022 고급딥러닝시스템 응용 실습
+## Colab 사용해서 nice-slam 실행하기
+1. git clone
+(optional). google drive mount 
+```
+from google.colab import drive
+drive.mount('/content/drive')
+```
+(optional). google colab run time 유지: Press F12
+```
+function ClickConnect(){
+console.log("Working"); 
+document.querySelector("colab-toolbar-button#connect").click() 
+}setInterval(ClickConnect, 1800000)
+```
+
+
+2. prepare environments
+```
+!apt-get install libopenexr-dev
+!pip install colorama open3d trimesh rtree mathutils==2.81.2
+```
+
+3. demo download
+```
+cd nice-slam
+!bash scripts/download_demo.sh
+```
+
+4. demo 돌려보기
+```
+!python -W ignore run.py configs/Demo/demo.yaml
+```
+
+
+
 <!-- PROJECT LOGO -->
 
 <p align="center">
