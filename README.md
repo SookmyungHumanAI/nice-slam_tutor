@@ -59,11 +59,11 @@ idx, gt_color.shape, gt_depth.shape, gt_c2w.shape
 ```
 2. Get Models
 
-~~~~
-src\conv_onet\config.py
-~~~~
+```
+@ src\conv_onet\config.py
+```
+\\<!--
 <details>
-  
 ```python
 from src.conv_onet.models.decoder import NICE
 
@@ -81,9 +81,14 @@ decoder = NICE(
 decoder
 ```  
 </details>
+-->
 
 4. Get Samples
-5. 
+
+```
+@ src\Tracker.py
+```
+
 6. 모델 summary 확인하기
 
 <!-- PROJECT LOGO -->
