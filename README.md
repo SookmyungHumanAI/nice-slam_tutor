@@ -225,6 +225,9 @@ F.grid_sample 이용
 
 ## depth map를 이용해서 point cloud 만들기
 ### Load instrinsic
+```
+@ src/NICE_SLAM.py
+```
 ```python
 import torch
 import numpy as np
@@ -285,7 +288,26 @@ valid_y = torch.arange(H, dtype=torch.float32) / (H - 1)
 valid_y, valid_x = torch.meshgrid(valid_y, valid_x)
 valid_x.shape, valid_y.shape, valid_z.shape
 ```
+### NDC 좌표계로 변환
+```python
+H, W = depth_data.shape
+inv_scale = torch.tensor([[W - 1, H - 1]], device=ndc_xyz.device)
+cam_z = ndc_xyz[..., 2:3] * (far-near) + near 
+cam_xy = ndc_xyz[..., :2] * inv_scale * cam_z 
+cam_xyz = torch.cat([cam_xy, cam_z], dim=-1)  
+print(cam_xyz.shape, cam_xyz.max(), cam_xyz.min(), cam_xyz.dtype)
 
+cam_xyz = cam_xyz @ torch.inverse(intrinsic.t()).to(torch.float32)
+print(cam_xyz.shape, cam_xyz.max(), cam_xyz.min(), cam_xyz.dtype)
+```
+### Point Cloud 시각화
+```
+import open3d as o3d
+
+pcd2 = o3d.geometry.PointCloud()
+pcd2.points = o3d.utility.Vector3dVector(cam_xyz.view(-1,3))
+o3d.visualization.draw_geometries([pcd2]) # ,point_show_normal=True)
+```
 
 <!-- PROJECT LOGO -->
 
