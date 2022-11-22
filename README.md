@@ -45,14 +45,15 @@ args = argparse.Namespace(config = 'configs/Demo/demo.yaml', \
                           input_folder = None, output = None, nice = True)
 cfg = load_config(args.config, 'configs/nice_slam.yaml')
 
-frame_reader = ScanNet(cfg, args, cfg['scale'], device='cpu')
+frame_reader = ScanNet(cfg, args, cfg['scale'], device ='cuda:0') # device='cpu')
 n_img = len(frame_reader)
 
 for idx, gt_color, gt_depth, gt_c2w in frame_reader:
     break
 
 plt.figure(figsize=[11,5])
-plt.subplot(121); plt.imshow(gt_color); plt.subplot(122); plt.imshow(gt_depth); 
+plt.subplot(121); plt.imshow(gt_color.cpu());
+plt.subplot(122); plt.imshow(gt_depth.cpu()); 
 
 idx, gt_color.shape, gt_depth.shape, gt_c2w.shape
 ```
