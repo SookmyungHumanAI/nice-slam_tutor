@@ -1,6 +1,7 @@
 # 2022 고급딥러닝시스템 응용 실습
 ## Colab 사용해서 nice-slam 실행하기
 1. git clone
+
 (optional). google drive mount 
 ```
 from google.colab import drive
@@ -32,7 +33,30 @@ cd nice-slam
 !python -W ignore run.py configs/Demo/demo.yaml
 ```
 
+## 코드 읽고 직접 손으로 모델 그려보기
+1. nice-slam 코드에서 dataset 불러오기
+```python
+import argparse
+from src.utils.datasets import ScanNet
+from src.config import load_config
+import matplotlib.pyplot as plt
 
+args = argparse.Namespace(config = 'configs/Demo/demo.yaml', \
+                          input_folder = None, output = None, nice = True)
+cfg = load_config(args.config, 'configs/nice_slam.yaml')
+
+frame_reader = ScanNet(cfg, args, cfg['scale'], device='cpu')
+n_img = len(frame_reader)
+
+for idx, gt_color, gt_depth, gt_c2w in frame_reader:
+    break
+
+plt.figure(figsize=[11,5])
+plt.subplot(121); plt.imshow(gt_color); plt.subplot(122); plt.imshow(gt_depth); 
+
+idx, gt_color.shape, gt_depth.shape, gt_c2w.shape
+```
+2. 모델 summary 확인하기
 
 <!-- PROJECT LOGO -->
 
