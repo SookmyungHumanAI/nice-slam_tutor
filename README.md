@@ -172,7 +172,7 @@ summary(decoder, input_data = [pi, c])
 <!--
 ![image](https://user-images.githubusercontent.com/10238769/203263221-b7cfa34d-2548-408a-a671-52c473e63a72.png){: width="100" height="100"}
 -->
-<img src="https://user-images.githubusercontent.com/10238769/203263221-b7cfa34d-2548-408a-a671-52c473e63a72.png" width="200" height="400"/>
+<img src="https://user-images.githubusercontent.com/10238769/203263221-b7cfa34d-2548-408a-a671-52c473e63a72.png" width="200" height="200"/>
                                                                                                                                          
 2. 직접 구현하기
 
