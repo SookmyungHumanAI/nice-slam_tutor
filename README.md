@@ -232,13 +232,37 @@ import cv2
 import os
 
 class config():
-    def __init__(self):
-        self.H, self.W = 680, 1200,
-        self.fx, self.fy = 600.0, 600.0,
-        self.cx, self.cy = 599.5, 339.5,
-        self.png_depth_scale = 6553.5 
-self = config()
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.H, self.W, self.fx, self.fy, self.cx, self.cy = cfg['cam']['H'], cfg['cam'][
+        'W'], cfg['cam']['fx'], cfg['cam']['fy'], cfg['cam']['cx'], cfg['cam']['cy']
+        self.update_cam()
+    
+    def update_cam(self):
+        """
+        Update the camera intrinsics according to pre-processing config, 
+        such as resize or edge crop.
+        """
+        # resize the input images to crop_size (variable name used in lietorch)
+        if 'crop_size' in self.cfg['cam']:
+            crop_size = self.cfg['cam']['crop_size']
+            sx = crop_size[1] / self.W
+            sy = crop_size[0] / self.H
+            self.fx = sx*self.fx
+            self.fy = sy*self.fy
+            self.cx = sx*self.cx
+            self.cy = sy*self.cy
+            self.W = crop_size[1]
+            self.H = crop_size[0]
 
+        # croping will change H, W, cx, cy, so need to change here
+        if self.cfg['cam']['crop_edge'] > 0:
+            self.H -= self.cfg['cam']['crop_edge']*2
+            self.W -= self.cfg['cam']['crop_edge']*2
+            self.cx -= self.cfg['cam']['crop_edge']
+            self.cy -= self.cfg['cam']['crop_edge']
+            
+self = config(cfg)
 H, W, fx, fy, cx, cy = self.H, self.W, self.fx, self.fy, self.cx, self.cy
 
 intrinsic = torch.from_numpy(
@@ -248,20 +272,13 @@ print(intrinsic)
 ```
 ### Load Depth Map View
 ```python
-H, W = depth_data.shape
-valid_z = depth_data
-valid_x = torch.arange(W, dtype=torch.float32) / (W - 1)
-valid_y = torch.arange(H, dtype=torch.float32) / (H - 1)
-valid_y, valid_x = torch.meshgrid(valid_y, valid_x)
-valid_x.shape, valid_y.shape
-```
+depth_data = gt_depth
 
-```python
 far, near = depth_data.max(), depth_data.min() 
 print(f'far, near: {far}, {near}')
 
 H, W = depth_data.shape
-valid_z = torch.tensor(depth_data.astype(np.float32),dtype=torch.float32)
+valid_z = depth_data
 valid_z = (valid_z-near)/(far-near)
 valid_x = torch.arange(W, dtype=torch.float32) / (W - 1)
 valid_y = torch.arange(H, dtype=torch.float32) / (H - 1)
