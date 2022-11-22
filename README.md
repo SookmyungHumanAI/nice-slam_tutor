@@ -182,10 +182,10 @@ summary(decoder, input_data = [pi, c])
 > - class MLP(nn.Module): 안에 있는 __init__ 함수의 self.fc_c와 self.pts_linears를 for문 없이 구현
 > - class MLP(nn.Module): 안에 있는 forward 함수의 for i, l in enumerate(self.pts_linears):
 > #### 결과 확인 방법 
->> - points와 color grid를 넣었을 때 예:
->> - ```python ret = decoder(pi, c_grid=c, stage=stage)``` 
->> - ret.shape가 torch.Size([48000, 4]) 임을 확인
->> - 수업시간에 코드 확인
+> - points와 color grid를 넣었을 때 예:
+> - ```python ret = decoder(pi, c_grid=c, stage=stage)``` 
+> - ret.shape가 torch.Size([48000, 4]) 임을 확인
+> - 수업시간에 코드 확인
 
 
 
