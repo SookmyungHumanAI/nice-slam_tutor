@@ -1,4 +1,8 @@
 # 2022 고급딥러닝시스템 응용 실습
+1. NICE-SLAM + Point-NeRF : Point Feature를 MLP 입력으로 추가
+2. NICE-SLAM + Monocular Depth Estimation : RGB-D 데이터셋을 Mono Depth Estimation으로 교체
+
+
 ## Colab 사용해서 nice-slam 실행하기
 1. git clone
 
