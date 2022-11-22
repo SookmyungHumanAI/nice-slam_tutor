@@ -164,9 +164,110 @@ summary(decoder, input_data = [pi, c])
 2. 직접 구현하기
 
 ## Pretrained Model (vgg) 잘라서 가지고 오기
+### VGG Pretrained Model
+```python
+import torch
+import torchvision
+from torch import nn
+
+vgg16 = torchvision.models.vgg16(pretrained=True)
+vgg16
+```
+
+```python
+layers = []
+for cnt, layer in enumerate(vgg16.features):
+    layers.append(layer)
+    if cnt == 15:
+        break
+
+layers += [nn.Conv2d(layers[-2].__dict__['out_channels'], 32, 1, )]
+vgg_sel = nn.Sequential(*layers)
+
+img = torch.randn((1,3,128,128))
+out = vgg_sel(img)
+
+img.shape, out.shape
+```
+### VGG Input Data Preparation
+
+```python
+from torchvision import transforms, datasets
+
+# Data augmentation and normalization for training
+# Just normalization for validation
+data_transforms = {
+    'train': transforms.Compose([
+        transforms.Resize(224),
+        transforms.RandomCrop(224),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+    'val': transforms.Compose([
+        transforms.Resize(224),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ]),
+}
+
+from PIL import Image
+
+Image.fromarray(color_data)
+
+tf_image = data_transforms['val'](Image.fromarray(color_data))
+vgg_out = vgg_sel(tf_image)
+vgg_out.shape, color_data.shape, tf_image.shape
+```
+### VGG Feature를 (32,32)에서 (H,W)로 Interpolation
+F.grid_sample 이용
 
 ## depth map를 이용해서 point cloud 만들기
+### Load instrinsic
+```python
+import torch
+import numpy as np
+import cv2
+import os
 
+class config():
+    def __init__(self):
+        self.H, self.W = 680, 1200,
+        self.fx, self.fy = 600.0, 600.0,
+        self.cx, self.cy = 599.5, 339.5,
+        self.png_depth_scale = 6553.5 
+self = config()
+
+H, W, fx, fy, cx, cy = self.H, self.W, self.fx, self.fy, self.cx, self.cy
+
+intrinsic = torch.from_numpy(
+    np.array([[fx, .0, cx], [.0, fy, cy],
+              [.0, .0, 1.0]]).reshape(3, 3))
+print(intrinsic)
+```
+### Load Depth Map View
+```python
+H, W = depth_data.shape
+valid_z = depth_data
+valid_x = torch.arange(W, dtype=torch.float32) / (W - 1)
+valid_y = torch.arange(H, dtype=torch.float32) / (H - 1)
+valid_y, valid_x = torch.meshgrid(valid_y, valid_x)
+valid_x.shape, valid_y.shape
+```
+
+```python
+far, near = depth_data.max(), depth_data.min() 
+print(f'far, near: {far}, {near}')
+
+H, W = depth_data.shape
+valid_z = torch.tensor(depth_data.astype(np.float32),dtype=torch.float32)
+valid_z = (valid_z-near)/(far-near)
+valid_x = torch.arange(W, dtype=torch.float32) / (W - 1)
+valid_y = torch.arange(H, dtype=torch.float32) / (H - 1)
+valid_y, valid_x = torch.meshgrid(valid_y, valid_x)
+valid_x.shape, valid_y.shape, valid_z.shape
+```
 
 
 <!-- PROJECT LOGO -->
