@@ -311,10 +311,9 @@ import open3d as o3d
 
 pcd2 = o3d.geometry.PointCloud()
 pcd2.points = o3d.utility.Vector3dVector(points)
-o3d.visualization.draw_plotly([pcd2], zoom=0.3412,\
-                                  front=[0.4257, -0.2125, -0.8795],\
-                                  lookat=[2.6172, 2.0475, 1.532],\
-                                  up=[-0.0694, -0.9768, 0.2024]) # ,point_show_normal=True)
+pcd2.colors = o3d.utility.Vector3dVector(gt_color.cpu().reshape(-1,3))
+
+o3d.visualization.draw_plotly([pcd2]) # ,point_show_normal=True)
 ```
 
 <!-- PROJECT LOGO -->
