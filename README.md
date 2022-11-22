@@ -237,43 +237,8 @@ F.grid_sample 이용
 @ src/NICE_SLAM.py
 ```
 ```python
-import torch
 import numpy as np
-import cv2
-import os
 
-class config():
-    def __init__(self, cfg):
-        self.cfg = cfg
-        self.H, self.W, self.fx, self.fy, self.cx, self.cy = cfg['cam']['H'], cfg['cam'][
-        'W'], cfg['cam']['fx'], cfg['cam']['fy'], cfg['cam']['cx'], cfg['cam']['cy']
-        self.update_cam()
-    
-    def update_cam(self):
-        """
-        Update the camera intrinsics according to pre-processing config, 
-        such as resize or edge crop.
-        """
-        # resize the input images to crop_size (variable name used in lietorch)
-        if 'crop_size' in self.cfg['cam']:
-            crop_size = self.cfg['cam']['crop_size']
-            sx = crop_size[1] / self.W
-            sy = crop_size[0] / self.H
-            self.fx = sx*self.fx
-            self.fy = sy*self.fy
-            self.cx = sx*self.cx
-            self.cy = sy*self.cy
-            self.W = crop_size[1]
-            self.H = crop_size[0]
-
-        # croping will change H, W, cx, cy, so need to change here
-        if self.cfg['cam']['crop_edge'] > 0:
-            self.H -= self.cfg['cam']['crop_edge']*2
-            self.W -= self.cfg['cam']['crop_edge']*2
-            self.cx -= self.cfg['cam']['crop_edge']
-            self.cy -= self.cfg['cam']['crop_edge']
-            
-self = config(cfg)
 H, W, fx, fy, cx, cy = self.H, self.W, self.fx, self.fy, self.cx, self.cy
 
 intrinsic = torch.from_numpy(
@@ -317,11 +282,13 @@ print(cam_xyz.shape, cam_xyz.max(), cam_xyz.min(), cam_xyz.dtype)
 ```
 import open3d as o3d
 
+points = cam_xyz.reshape(-1,3).cpu()
+
 pcd2 = o3d.geometry.PointCloud()
 pcd2.points = o3d.utility.Vector3dVector(points)
 pcd2.colors = o3d.utility.Vector3dVector(gt_color.cpu().reshape(-1,3))
 
-o3d.visualization.draw_plotly([pcd2]) # ,point_show_normal=True)
+o3d.visualization.draw_plotly([pcd2]) 
 ```
 
 <!-- PROJECT LOGO -->
