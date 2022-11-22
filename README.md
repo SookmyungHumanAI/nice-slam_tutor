@@ -84,13 +84,68 @@ decoder
 </details>
 -->
 
-4. Get Samples
+4. Sampling Ray 가져오기, Get Ray Samples
 
 ```
 @ src\Tracker.py
 ```
 
+```python
+from src.NICE_SLAM import NICE_SLAM
+
+self = NICE_SLAM(cfg, args)
+
+batch_size = tracking_pixels = cfg['tracking']['pixels']
+
+# ...
+
+import torch
+device = self.tracker.device
+
+```
+
+5. Renderer 돌려보기, Run Renderder
+
+```
+@ src\Renderer.py
+```
+```python
+self.tracker.c = {}
+self.tracker.update_para_from_mapping()
+
+ret = self.renderer.render_batch_ray(
+    self.tracker.c, self.tracker.decoders, batch_rays_d, batch_rays_o,  self.tracker.device, stage='color',  gt_depth=batch_gt_depth)
+depth, uncertainty, color = ret
+```
+
+```python
+# def render_batch_ray(self, c, decoders, rays_d, rays_o, device, stage, gt_depth=None):
+
+c, decoders, rays_d, rays_o, device, stage, gt_depth = \
+self.tracker.c, self.tracker.decoders, batch_rays_d, batch_rays_o, \
+ self.tracker.device, 'color',  batch_gt_depth
+
+
+N_samples = self.renderer.N_samples
+N_surface = self.renderer.N_surface
+N_importance = self.renderer.N_importance
+
+# ...
+```
 6. 모델 summary 확인하기
+```python
+# def eval_points(self, p, decoders, c=None, stage='color', device='cuda:0'):
+p, decoders, c, stage, device = pointsf, decoders, c, stage, device
+
+p_split = torch.split(p, self.renderer.points_batch_size) # points_batch_size=500000 @ class Renderer(object):  def __init__(..
+bound = self.bound
+rets = []
+for pi in p_split:
+    break
+```
+```
+!pip install torchinfo
+```
 
 <!-- PROJECT LOGO -->
 
