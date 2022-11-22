@@ -62,7 +62,8 @@ idx, gt_color.shape, gt_depth.shape, gt_c2w.shape
 ```
 @ src\conv_onet\config.py
 ```
-\\<!--
+
+<!--
 <details>
 ```python
 from src.conv_onet.models.decoder import NICE
