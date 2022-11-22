@@ -147,6 +147,28 @@ for pi in p_split:
 !pip install torchinfo
 ```
 
+```python
+decoder.middle_decoder.bound = self.bound
+decoder.color_decoder.bound = self.bound
+decoder.fine_decoder.bound = self.bound
+
+ret = decoder(pi, c_grid=c, stage=stage) # class NICE(nn.Module): def forward(self, p, c_grid, stage='middle', **kwargs):
+```
+
+```python
+from torchinfo import summary
+summary(decoder, input_data = [pi, c])
+```
+## Decoder model 직접 구현하기
+1. Decoder model 구조 손으로 그려보기
+2. 직접 구현하기
+
+## Pretrained Model (vgg) 잘라서 가지고 오기
+
+## depth map를 이용해서 point cloud 만들기
+
+
+
 <!-- PROJECT LOGO -->
 
 <p align="center">
