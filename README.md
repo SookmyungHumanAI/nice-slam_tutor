@@ -165,11 +165,24 @@ ret = decoder(pi, c_grid=c, stage=stage) # class NICE(nn.Module): def forward(se
 from torchinfo import summary
 summary(decoder, input_data = [pi, c])
 ```
+
 ## Decoder model 직접 구현하기
 1. Decoder model 구조 손으로 그려보기
+
 ![image](https://user-images.githubusercontent.com/10238769/203263221-b7cfa34d-2548-408a-a671-52c473e63a72.png)
 
-3. 직접 구현하기
+2. 직접 구현하기
+
+
+> 프로젝트 과제 1 (12/06) 까지
+> # 과제 내용 
+> class MLP(nn.Module): 안에 있는 __init__ 함수의 self.fc_c와 self.pts_linears를 for문 없이 구현
+> class MLP(nn.Module): 안에 있는 forward 함수의 for i, l in enumerate(self.pts_linears):
+> 결과 확인 방법 
+>> points와 grid를 넣었을 때 ```python ret = decoder(pi, c_grid=c, stage=stage)``` ret.shape가 torch.Size([48000, 4]) 임을 확인
+>> 수업시간에 코드 확인
+
+
 
 ## Pretrained Model (vgg) 잘라서 가지고 오기
 ### VGG Pretrained Model
