@@ -115,10 +115,12 @@ device = self.tracker.device
 ```
 ```python
 self.tracker.c = {}
+self.tracker.prev_mapping_idx += 1
 self.tracker.update_para_from_mapping()
 
 ret = self.renderer.render_batch_ray(
-    self.tracker.c, self.tracker.decoders, batch_rays_d, batch_rays_o,  self.tracker.device, stage='color',  gt_depth=batch_gt_depth)
+    self.tracker.c, self.tracker.decoders, batch_rays_d, batch_rays_o, \
+     self.tracker.device, stage='color',  gt_depth=batch_gt_depth)
 depth, uncertainty, color = ret
 ```
 
