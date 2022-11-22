@@ -167,7 +167,9 @@ summary(decoder, input_data = [pi, c])
 ```
 ## Decoder model 직접 구현하기
 1. Decoder model 구조 손으로 그려보기
-2. 직접 구현하기
+![image](https://user-images.githubusercontent.com/10238769/203263221-b7cfa34d-2548-408a-a671-52c473e63a72.png)
+
+3. 직접 구현하기
 
 ## Pretrained Model (vgg) 잘라서 가지고 오기
 ### VGG Pretrained Model
