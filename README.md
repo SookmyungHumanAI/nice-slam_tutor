@@ -310,8 +310,11 @@ print(cam_xyz.shape, cam_xyz.max(), cam_xyz.min(), cam_xyz.dtype)
 import open3d as o3d
 
 pcd2 = o3d.geometry.PointCloud()
-pcd2.points = o3d.utility.Vector3dVector(cam_xyz.view(-1,3))
-o3d.visualization.draw_geometries([pcd2]) # ,point_show_normal=True)
+pcd2.points = o3d.utility.Vector3dVector(points)
+o3d.visualization.draw_plotly([pcd2], zoom=0.3412,\
+                                  front=[0.4257, -0.2125, -0.8795],\
+                                  lookat=[2.6172, 2.0475, 1.532],\
+                                  up=[-0.0694, -0.9768, 0.2024]) # ,point_show_normal=True)
 ```
 
 <!-- PROJECT LOGO -->
