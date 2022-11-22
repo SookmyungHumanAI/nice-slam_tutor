@@ -290,6 +290,11 @@ valid_x.shape, valid_y.shape, valid_z.shape
 ```
 ### NDC 좌표계로 변환
 ```python
+valid_x, valid_y = valid_x.to(device), valid_y.to(device)
+intrinsic = intrinsic.to(device)
+
+ndc_xyz = torch.stack([valid_x, valid_y, valid_z], dim=-1)
+
 H, W = depth_data.shape
 inv_scale = torch.tensor([[W - 1, H - 1]], device=ndc_xyz.device)
 cam_z = ndc_xyz[..., 2:3] * (far-near) + near 
