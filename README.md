@@ -63,7 +63,8 @@ idx, gt_color.shape, gt_depth.shape, gt_c2w.shape
 src\conv_onet\config.py
 ~~~~
 <details>
-```
+  
+```python
 from src.conv_onet.models.decoder import NICE
 
 dim = cfg['data']['dim']
@@ -78,8 +79,8 @@ decoder = NICE(
     middle_grid_len=middle_grid_len, fine_grid_len=fine_grid_len,
     color_grid_len=color_grid_len, pos_embedding_method=pos_embedding_method)
 decoder
-```
-<\details>
+```  
+</details>
 
 4. Get Samples
 5. 
