@@ -181,7 +181,7 @@ summary(decoder, input_data = [pi, c])
 > #### 과제 내용 
 > - class MLP(nn.Module): 안에 있는 __init__ 함수의 self.fc_c와 self.pts_linears를 for문 없이 구현
 > - DenseLayer 함수없이 nn.Layer로만 구현하고 DenseLayer 안에 parameter 초기화 부분은 무시함
-> - class MLP(nn.Module): 안에 있는 forward 함수의 for i, l in enumerate(self.pts_linears) 부분 for문 없이 구현
+> - class MLP(nn.Module): 안에 있는 __forward__ 함수의 for i, l in enumerate(self.pts_linears) 부분 for문 없이 구현
 > #### 결과 확인 방법 
 > - points와 color grid를 넣었을 때 예:
 > - ```python ret = decoder(pi, c_grid=c, stage=stage)``` 
