@@ -2,7 +2,7 @@
 1. NICE-SLAM + Point-NeRF : Point Feature를 MLP 입력으로 추가
 2. NICE-SLAM + Monocular Depth Estimation : RGB-D 데이터셋을 Mono Depth Estimation으로 교체
 
-
+# 2022-11-22 Class
 ## Colab 사용해서 nice-slam 실행하기
 1. git clone
 
@@ -176,8 +176,7 @@ summary(decoder, input_data = [pi, c])
                                                                                                                                          
 2. 직접 구현하기
 
-
-### 프로젝트 과제 1 (12/06) 수업시간 까지
+## 프로젝트 과제 1 (12/06) 수업시간 까지
 > #### 과제 내용 
 > - class MLP(nn.Module): 안에 있는 __init__ 함수의 self.fc_c와 self.pts_linears를 for문 없이 구현
 > - DenseLayer 함수없이 nn.Layer로만 구현하고 DenseLayer 안에 parameter 초기화 부분은 무시함
@@ -188,6 +187,210 @@ summary(decoder, input_data = [pi, c])
 > - ret.shape가 torch.Size([48000, 4]) 임을 확인
 > - 코드 및 결과 정리한 PPT 파일 제출 (수업시간에 코드 확인)
 
+# 2022-11-29 Class
+## Depth map를 이용해서 point cloud 만들기
+1. pytorch3d & nice-slam install
+```python
+# pytorch3d install
+import torchvision
+!pip install torch==1.11.0+cu113 torchvision==0.12.0+cu113 torchaudio==0.11.0 --extra-index-url https://download.pytorch.org/whl/cu113
+!pip install fvcore iopath 
+import sys
+import torch
+pyt_version_str=torch.__version__.split("+")[0].replace(".", "")
+version_str="".join([
+    f"py3{sys.version_info.minor}_cu",
+    torch.version.cuda.replace(".",""),
+    f"_pyt{pyt_version_str}"
+])
+!pip install --no-index --no-cache-dir pytorch3d -f https://dl.fbaipublicfiles.com/pytorch3d/packaging/wheels/{version_str}/download.html
+
+# nice-slam requirements
+!git clone https://github.com/jooyongsim/nice-slam.git
+!apt-get install libopenexr-dev
+!pip install colorama open3d trimesh rtree mathutils==2.81.2
+cd nice-slam
+```
+
+2. Load Dataset
+```python
+import argparse
+from src.utils.datasets import ScanNet
+from src.config import load_config
+import matplotlib.pyplot as plt
+
+args = argparse.Namespace(config = 'configs/Demo/demo.yaml', \
+                          input_folder = None, output = None, nice = True)
+cfg = load_config(args.config, 'configs/nice_slam.yaml')
+
+frame_reader = ScanNet(cfg, args, cfg['scale'], device ='cuda:0') # device='cpu')
+n_img = len(frame_reader)
+
+for idx, gt_color, gt_depth, gt_c2w in frame_reader:
+    break
+
+plt.figure(figsize=[11,5])
+plt.subplot(121); plt.imshow(gt_color.cpu());
+plt.subplot(122); plt.imshow(gt_depth.cpu()); 
+
+depth_data, color_data = gt_depth, gt_color
+```
+
+3. Load Models & NICE-SLAM Class
+```python
+# @ src/conv_onet/config.py
+%load_ext autoreload
+%autoreload 2
+
+from src.conv_onet.models.decoder import NICE 
+
+dim = cfg['data']['dim']
+coarse_grid_len = cfg['grid_len']['coarse']
+middle_grid_len = cfg['grid_len']['middle']
+fine_grid_len = cfg['grid_len']['fine']
+color_grid_len = cfg['grid_len']['color']
+c_dim = cfg['model']['c_dim']  # feature dimensions
+pos_embedding_method = cfg['model']['pos_embedding_method']
+
+decoder = NICE(
+    dim=dim, c_dim=c_dim, coarse=cfg['coarse'], coarse_grid_len=coarse_grid_len,
+    middle_grid_len=middle_grid_len, fine_grid_len=fine_grid_len,
+    color_grid_len=color_grid_len, pos_embedding_method=pos_embedding_method)
+
+from src.NICE_SLAM import NICE_SLAM
+self = NICE_SLAM(cfg, args)
+```
+
+4. Get Sampling Rays 
+```python
+# @ src/Tracker.py
+from src.common import (get_camera_from_tensor, get_samples,
+                        get_tensor_from_camera)
+
+batch_size = cfg['tracking']['pixels'] # 1000
+c2w = gt_c2w
+device = self.tracker.device
+H, W, fx, fy, cx, cy = self.H, self.W, self.fx, self.fy, self.cx, self.cy
+# optimizer.zero_grad()
+# c2w = get_camera_from_tensor(camera_tensor)
+Wedge = self.tracker.ignore_edge_W
+Hedge = self.tracker.ignore_edge_H
+batch_rays_o, batch_rays_d, batch_gt_depth, batch_gt_color = get_samples(
+    Hedge, H-Hedge, Wedge, W-Wedge, batch_size, H, W, fx, fy, cx, cy, c2w, \
+    gt_depth, gt_color, self.tracker.device)
+
+import torch
+with torch.no_grad():
+    det_rays_o = batch_rays_o.clone().detach().unsqueeze(-1)  # (N, 3, 1)
+    det_rays_d = batch_rays_d.clone().detach().unsqueeze(-1)  # (N, 3, 1)
+    t = (self.bound.unsqueeze(0).to(device)-det_rays_o)/det_rays_d
+    t, _ = torch.min(torch.max(t, dim=2)[0], dim=1)
+    inside_mask = t >= batch_gt_depth
+batch_rays_d = batch_rays_d[inside_mask]
+batch_rays_o = batch_rays_o[inside_mask]
+batch_gt_depth = batch_gt_depth[inside_mask]
+batch_gt_color = batch_gt_color[inside_mask]
+
+def print_shape(*paras):
+    for para in paras:
+        print(para.shape)
+
+print_shape(batch_rays_o, batch_rays_d, batch_gt_depth, batch_gt_color) 
+Hedge, H-Hedge, Wedge, W-Wedge, self.H, self.W, self.fx, self.fy, self.cx, self.cy
+```
+
+5. Render Batch Ray
+```python
+import torch
+with torch.no_grad():
+    det_rays_o = batch_rays_o.clone().detach().unsqueeze(-1)  # (N, 3, 1)
+    det_rays_d = batch_rays_d.clone().detach().unsqueeze(-1)  # (N, 3, 1)
+    t = (self.bound.unsqueeze(0).to(device)-det_rays_o)/det_rays_d
+    t, _ = torch.min(torch.max(t, dim=2)[0], dim=1)
+    inside_mask = t >= batch_gt_depth
+batch_rays_d = batch_rays_d[inside_mask]
+batch_rays_o = batch_rays_o[inside_mask]
+batch_gt_depth = batch_gt_depth[inside_mask]
+batch_gt_color = batch_gt_color[inside_mask]
+
+self.tracker.c = {} # self.tracker.prev_mapping_idx += 1
+self.tracker.update_para_from_mapping()
+print(self.tracker.c.keys())
+
+ret = self.renderer.render_batch_ray(
+    self.tracker.c, self.tracker.decoders, batch_rays_d, batch_rays_o, \
+     self.tracker.device, stage='color',  gt_depth=batch_gt_depth)
+depth, uncertainty, color = ret
+
+def print_shape(*paras):
+    for para in paras:
+        print(para.shape)
+
+print_shape(self.tracker.c['grid_coarse'], self.tracker.c['grid_middle'], \
+self.tracker.c['grid_fine'], self.tracker.c['grid_color'], )
+
+print_shape(depth, uncertainty, color )
+```
+
+
+### Load instrinsic
+```
+@ src/NICE_SLAM.py
+```
+```python
+import numpy as np
+
+H, W, fx, fy, cx, cy = self.H, self.W, self.fx, self.fy, self.cx, self.cy
+
+intrinsic = torch.from_numpy(
+    np.array([[fx, .0, cx], [.0, fy, cy],
+              [.0, .0, 1.0]]).reshape(3, 3))
+print(intrinsic)
+```
+### Load Depth Map View
+```python
+depth_data = gt_depth
+
+far, near = depth_data.max(), depth_data.min() 
+print(f'far, near: {far}, {near}')
+
+H, W = depth_data.shape
+valid_z = depth_data
+valid_z = (valid_z-near)/(far-near)
+valid_x = torch.arange(W, dtype=torch.float32) / (W - 1)
+valid_y = torch.arange(H, dtype=torch.float32) / (H - 1)
+valid_y, valid_x = torch.meshgrid(valid_y, valid_x)
+valid_x.shape, valid_y.shape, valid_z.shape
+```
+### NDC 좌표계로 변환
+```python
+valid_x, valid_y = valid_x.to(device), valid_y.to(device)
+intrinsic = intrinsic.to(device)
+
+ndc_xyz = torch.stack([valid_x, valid_y, valid_z], dim=-1)
+
+H, W = depth_data.shape
+inv_scale = torch.tensor([[W - 1, H - 1]], device=ndc_xyz.device)
+cam_z = ndc_xyz[..., 2:3] * (far-near) + near 
+cam_xy = ndc_xyz[..., :2] * inv_scale * cam_z 
+cam_xyz = torch.cat([cam_xy, cam_z], dim=-1)  
+print(cam_xyz.shape, cam_xyz.max(), cam_xyz.min(), cam_xyz.dtype)
+
+cam_xyz = cam_xyz @ torch.inverse(intrinsic.t()).to(torch.float32)
+print(cam_xyz.shape, cam_xyz.max(), cam_xyz.min(), cam_xyz.dtype)
+```
+### Point Cloud 시각화
+```
+import open3d as o3d
+
+points = cam_xyz.reshape(-1,3).cpu()
+
+pcd2 = o3d.geometry.PointCloud()
+pcd2.points = o3d.utility.Vector3dVector(points)
+pcd2.colors = o3d.utility.Vector3dVector(gt_color.cpu().reshape(-1,3))
+
+o3d.visualization.draw_plotly([pcd2]) 
+```
 
 
 ## Pretrained Model (vgg) 잘라서 가지고 오기
@@ -250,65 +453,6 @@ vgg_out.shape, color_data.shape, tf_image.shape
 ### VGG Feature를 (32,32)에서 (H,W)로 Interpolation
 F.grid_sample 이용
 
-## depth map를 이용해서 point cloud 만들기
-### Load instrinsic
-```
-@ src/NICE_SLAM.py
-```
-```python
-import numpy as np
-
-H, W, fx, fy, cx, cy = self.H, self.W, self.fx, self.fy, self.cx, self.cy
-
-intrinsic = torch.from_numpy(
-    np.array([[fx, .0, cx], [.0, fy, cy],
-              [.0, .0, 1.0]]).reshape(3, 3))
-print(intrinsic)
-```
-### Load Depth Map View
-```python
-depth_data = gt_depth
-
-far, near = depth_data.max(), depth_data.min() 
-print(f'far, near: {far}, {near}')
-
-H, W = depth_data.shape
-valid_z = depth_data
-valid_z = (valid_z-near)/(far-near)
-valid_x = torch.arange(W, dtype=torch.float32) / (W - 1)
-valid_y = torch.arange(H, dtype=torch.float32) / (H - 1)
-valid_y, valid_x = torch.meshgrid(valid_y, valid_x)
-valid_x.shape, valid_y.shape, valid_z.shape
-```
-### NDC 좌표계로 변환
-```python
-valid_x, valid_y = valid_x.to(device), valid_y.to(device)
-intrinsic = intrinsic.to(device)
-
-ndc_xyz = torch.stack([valid_x, valid_y, valid_z], dim=-1)
-
-H, W = depth_data.shape
-inv_scale = torch.tensor([[W - 1, H - 1]], device=ndc_xyz.device)
-cam_z = ndc_xyz[..., 2:3] * (far-near) + near 
-cam_xy = ndc_xyz[..., :2] * inv_scale * cam_z 
-cam_xyz = torch.cat([cam_xy, cam_z], dim=-1)  
-print(cam_xyz.shape, cam_xyz.max(), cam_xyz.min(), cam_xyz.dtype)
-
-cam_xyz = cam_xyz @ torch.inverse(intrinsic.t()).to(torch.float32)
-print(cam_xyz.shape, cam_xyz.max(), cam_xyz.min(), cam_xyz.dtype)
-```
-### Point Cloud 시각화
-```
-import open3d as o3d
-
-points = cam_xyz.reshape(-1,3).cpu()
-
-pcd2 = o3d.geometry.PointCloud()
-pcd2.points = o3d.utility.Vector3dVector(points)
-pcd2.colors = o3d.utility.Vector3dVector(gt_color.cpu().reshape(-1,3))
-
-o3d.visualization.draw_plotly([pcd2]) 
-```
 
 <!-- PROJECT LOGO -->
 
