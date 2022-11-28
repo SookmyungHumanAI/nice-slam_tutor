@@ -209,7 +209,8 @@ version_str="".join([
 !git clone https://github.com/jooyongsim/nice-slam.git
 !apt-get install libopenexr-dev
 !pip install colorama open3d trimesh rtree mathutils==2.81.2
-cd nice-slam
+%cd nice-slam
+!bash scripts/download_demo.sh
 ```
 
 2. Load Dataset
@@ -301,30 +302,15 @@ Hedge, H-Hedge, Wedge, W-Wedge, self.H, self.W, self.fx, self.fy, self.cx, self.
 
 5. Render Batch Ray
 ```python
-import torch
-with torch.no_grad():
-    det_rays_o = batch_rays_o.clone().detach().unsqueeze(-1)  # (N, 3, 1)
-    det_rays_d = batch_rays_d.clone().detach().unsqueeze(-1)  # (N, 3, 1)
-    t = (self.bound.unsqueeze(0).to(device)-det_rays_o)/det_rays_d
-    t, _ = torch.min(torch.max(t, dim=2)[0], dim=1)
-    inside_mask = t >= batch_gt_depth
-batch_rays_d = batch_rays_d[inside_mask]
-batch_rays_o = batch_rays_o[inside_mask]
-batch_gt_depth = batch_gt_depth[inside_mask]
-batch_gt_color = batch_gt_color[inside_mask]
-
-self.tracker.c = {} # self.tracker.prev_mapping_idx += 1
+# @ src/Renderer.py
+self.tracker.c = {}  # self.tracker.prev_mapping_idx += 1
 self.tracker.update_para_from_mapping()
 print(self.tracker.c.keys())
 
 ret = self.renderer.render_batch_ray(
     self.tracker.c, self.tracker.decoders, batch_rays_d, batch_rays_o, \
-     self.tracker.device, stage='color',  gt_depth=batch_gt_depth)
+     self.tracker.device, stage='color', gt_depth=batch_gt_depth)
 depth, uncertainty, color = ret
-
-def print_shape(*paras):
-    for para in paras:
-        print(para.shape)
 
 print_shape(self.tracker.c['grid_coarse'], self.tracker.c['grid_middle'], \
 self.tracker.c['grid_fine'], self.tracker.c['grid_color'], )
@@ -332,6 +318,128 @@ self.tracker.c['grid_fine'], self.tracker.c['grid_color'], )
 print_shape(depth, uncertainty, color )
 ```
 
+6. 직접 sampling ray 만들어보기
+```python
+# @ src/Renderer.py
+# @ src/Renderer.py
+c, decoders, rays_d, rays_o, device, stage, gt_depth = \
+self.tracker.c, self.tracker.decoders, batch_rays_d, batch_rays_o, \
+ self.tracker.device, 'color',  batch_gt_depth
+
+N_samples = self.renderer.N_samples
+N_surface = self.renderer.N_surface
+N_importance = self.renderer.N_importance
+
+N_rays = rays_o.shape[0]
+
+if stage == 'coarse':
+    gt_depth = None
+if gt_depth is None:
+    N_surface = 0
+    near = 0.01
+else:
+    gt_depth = gt_depth.reshape(-1, 1)
+    gt_depth_samples = gt_depth.repeat(1, N_samples)
+    near = gt_depth_samples*0.01
+
+with torch.no_grad():
+    det_rays_o = rays_o.clone().detach().unsqueeze(-1)  # (N, 3, 1)
+    det_rays_d = rays_d.clone().detach().unsqueeze(-1)  # (N, 3, 1)
+    t = (self.bound.unsqueeze(0).to(device) -
+            det_rays_o)/det_rays_d  # (N, 3, 2)
+    far_bb, _ = torch.min(torch.max(t, dim=2)[0], dim=1)
+    far_bb = far_bb.unsqueeze(-1)
+    far_bb += 0.01
+
+if gt_depth is not None:
+    # in case the bound is too large
+    far = torch.clamp(far_bb, 0,  torch.max(gt_depth*1.2))
+else:
+    far = far_bb
+if N_surface > 0:
+    if False:
+        # this naive implementation downgrades performance
+        gt_depth_surface = gt_depth.repeat(1, N_surface)
+        t_vals_surface = torch.linspace(
+            0., 1., steps=N_surface).to(device)
+        z_vals_surface = 0.95*gt_depth_surface * \
+            (1.-t_vals_surface) + 1.05 * \
+            gt_depth_surface * (t_vals_surface)
+    else:
+        # since we want to colorize even on regions with no depth sensor readings,
+        # meaning colorize on interpolated geometry region,
+        # we sample all pixels (not using depth mask) for color loss.
+        # Therefore, for pixels with non-zero depth value, we sample near the surface,
+        # since it is not a good idea to sample 16 points near (half even behind) camera,
+        # for pixels with zero depth value, we sample uniformly from camera to max_depth.
+        gt_none_zero_mask = gt_depth > 0
+        gt_none_zero = gt_depth[gt_none_zero_mask]
+        gt_none_zero = gt_none_zero.unsqueeze(-1)
+        gt_depth_surface = gt_none_zero.repeat(1, N_surface)
+        t_vals_surface = torch.linspace(
+            0., 1., steps=N_surface).double().to(device)
+        # emperical range 0.05*depth
+        z_vals_surface_depth_none_zero = 0.95*gt_depth_surface * \
+            (1.-t_vals_surface) + 1.05 * \
+            gt_depth_surface * (t_vals_surface)
+        z_vals_surface = torch.zeros(
+            gt_depth.shape[0], N_surface).to(device).double()
+        gt_none_zero_mask = gt_none_zero_mask.squeeze(-1)
+        z_vals_surface[gt_none_zero_mask,
+                        :] = z_vals_surface_depth_none_zero
+        near_surface = 0.001
+        far_surface = torch.max(gt_depth)
+        z_vals_surface_depth_zero = near_surface * \
+            (1.-t_vals_surface) + far_surface * (t_vals_surface)
+        z_vals_surface_depth_zero.unsqueeze(
+            0).repeat((~gt_none_zero_mask).sum(), 1)
+        z_vals_surface[~gt_none_zero_mask,
+                        :] = z_vals_surface_depth_zero
+
+t_vals = torch.linspace(0., 1., steps=N_samples, device=device)
+
+if not self.renderer.lindisp:
+    z_vals = near * (1.-t_vals) + far * (t_vals)
+else:
+    z_vals = 1./(1./near * (1.-t_vals) + 1./far * (t_vals))
+
+if self.renderer.perturb > 0.:
+    # get intervals between samples
+    mids = .5 * (z_vals[..., 1:] + z_vals[..., :-1])
+    upper = torch.cat([mids, z_vals[..., -1:]], -1)
+    lower = torch.cat([z_vals[..., :1], mids], -1)
+    # stratified samples in those intervals
+    t_rand = torch.rand(z_vals.shape).to(device)
+    z_vals = lower + (upper - lower) * t_rand
+
+if N_surface > 0:
+    z_vals, _ = torch.sort(
+        torch.cat([z_vals, z_vals_surface.double()], -1), -1)
+
+pts = rays_o[..., None, :] + rays_d[..., None, :] * \
+    z_vals[..., :, None]  # [N_rays, N_samples+N_surface, 3]
+pointsf = pts.reshape(-1, 3)
+print_shape(t_vals, pointsf, z_vals, z_vals_surface)
+```
+
+7. Neural Network에 sampling ray 넣어서 테스트
+```python
+p, decoders, c, stage, device = pointsf, decoders, c, stage, device
+
+p_split = torch.split(p, self.renderer.points_batch_size) # points_batch_size=500000 @ class Renderer(object):  def __init__(..
+bound = self.bound
+rets = []
+for pi in p_split:
+    break
+
+decoder = decoder.to(device)
+decoder.middle_decoder.bound = self.bound
+decoder.color_decoder.bound = self.bound
+decoder.fine_decoder.bound = self.bound
+
+ret = decoder(pi, c_grid=c, stage=stage)
+ret.shape
+```
 
 ### Load instrinsic
 ```
