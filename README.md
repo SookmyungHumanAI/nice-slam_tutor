@@ -497,6 +497,8 @@ o3d.visualization.draw_plotly([total_pt, ray_sampling])
 ```
 
 ## kNN Point sampling
+![image](https://user-images.githubusercontent.com/10238769/204462137-0c1eb66e-2d72-42f4-a726-32b65d488e5c.png)
+
 1. kNN of depth point cloud for sampling ray
 ```python
 from pytorch3d.ops.knn import knn_points
