@@ -538,7 +538,7 @@ k_querying.colors = o3d.utility.Vector3dVector(knn_color)
 o3d.visualization.draw_plotly([total_pt, k_querying])
 ```
 
-## Pretrained Model (vgg) 잘라서 가지고 오기
+## Pretrained Point Features
 ### VGG Pretrained Model
 ```python
 import torch
@@ -556,7 +556,7 @@ for cnt, layer in enumerate(vgg16.features):
     if cnt == 15:
         break
 
-layers += [nn.Conv2d(layers[-2].__dict__['out_channels'], 32, 1, )]
+layers += [# ... ]
 vgg_sel = nn.Sequential(*layers)
 
 img = torch.randn((1,3,128,128))
@@ -567,36 +567,35 @@ img.shape, out.shape
 ### VGG Input Data Preparation
 
 ```python
-from torchvision import transforms, datasets
+from torchvision import transforms
 
-# Data augmentation and normalization for training
-# Just normalization for validation
-data_transforms = {
-    'train': transforms.Compose([
-        transforms.Resize(224),
-        transforms.RandomCrop(224),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ]),
-    'val': transforms.Compose([
+data_transforms = transforms.Compose([
         transforms.Resize(224),
         transforms.CenterCrop(224),
-        transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ]),
-}
+    ])
+    
+vgg_sel = vgg_sel.to(device)
+tf_image = data_transforms(color_data.permute((2,0,1))).to(torch.float32)
 
-from PIL import Image
-
-Image.fromarray(color_data)
-
-tf_image = data_transforms['val'](Image.fromarray(color_data))
 vgg_out = vgg_sel(tf_image)
 vgg_out.shape, color_data.shape, tf_image.shape
 ```
 ### VGG Feature를 (32,32)에서 (H,W)로 Interpolation
-F.grid_sample 이용
+- F.grid_sample 이용
+```python
+H, W = depth_data.shape
+gr_x = (torch.arange(W, dtype=torch.float32)*2 - W + 1) / W
+gr_y = (torch.arange(H, dtype=torch.float32)*2 - H + 1) / H
+gr_y, gr_x = torch.meshgrid(gr_y, gr_x)
+
+import torch.nn.functional as F
+
+vgrid = torch.stack([gr_x, gr_y], dim=-1).to(device).unsqueeze(0)
+
+p_feat = F.grid_sample(vgg_out.unsqueeze(0), vgrid)
+```
+
 
 
 <!--
