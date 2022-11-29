@@ -609,6 +609,158 @@ plt.subplot(121); plt.imshow(img)
 plt.subplot(122); plt.imshow(feat)
 ```
 
+## src code modification
+1. Test with render batch ray
+```python
+from src.NICE_SLAM import NICE_SLAM
+self = NICE_SLAM(cfg, args)
+self.tracker.c = {}  # self.tracker.prev_mapping_idx += 1
+self.tracker.update_para_from_mapping()
+self.cam_xyz = cam_xyz
+
+ret = self.renderer.render_batch_ray(
+    self.tracker.c, self.tracker.decoders, batch_rays_d, batch_rays_o, \
+     self.tracker.device, stage='color', gt_depth=batch_gt_depth, \
+     color_data=color_data, cam_xyz = self.cam_xyz)
+depth, uncertainty, color = ret
+```
+2. render_batch_ray @ Renderer.py
+```python
+    def render_batch_ray(self, c, decoders, rays_d, rays_o, device, stage, gt_depth=None, color_data=None, cam_xyz = None):
+    # ...
+```
+<!--
+```python
+    def render_batch_ray(self, c, decoders, rays_d, rays_o, device, stage, gt_depth=None, color_data=None, cam_xyz = None):
+        self.cam_xyz = cam_xyz.view(-1,3)
+        tf_image = decoders.data_transforms(color_data.permute((2,0,1))).to(torch.float32)
+        p_feat = decoders.vgg_sel(tf_image)
+        device = p_feat.device
+
+        H, W, C = color_data.shape
+        gr_x = (torch.arange(W)*2. - W + 1) / W
+        gr_y = (torch.arange(H)*2. - H + 1) / H
+        gr_y, gr_x = torch.meshgrid(gr_y, gr_x)
+        vgrid = torch.stack([gr_x, gr_y], dim=-1).unsqueeze(0).to(device)
+
+        p_feat = torch.nn.functional.grid_sample(p_feat.unsqueeze(0), vgrid)
+        _, n_c, _, _ = p_feat.shape
+        self.p_feat = p_feat.squeeze().permute((1,2,0)).view(-1,n_c)
+        # --->
+```
+-->
+3. eval_points @ Renderer.py
+```python
+    def eval_points(self, p, decoders, c=None, stage='color', device='cuda:0'):
+    # ...
+```
+<!--
+```python
+    def eval_points(self, p, decoders, c=None, stage='color', device='cuda:0'):
+            if self.nice:
+                ret = decoders(pi, c_grid=c, stage=stage,\
+                 p_feat = self.p_feat, cam_xyz = self.cam_xyz)
+```
+-->
+4. __init__ @ class NICE @ decoder.py
+```python
+  class NICE(nn.Module):
+      # ...
+          vgg16 = torchvision.models.vgg16(pretrained=True)
+      # ...
+        self.color_decoder = MLP(name='color', dim=dim, c_dim=c_dim, color=True,
+                                 skips=[2], n_blocks=5, hidden_size=hidden_size,
+                                 grid_len=color_grid_len, pos_embedding_method=pos_embedding_method,
+                                 vgg_out_ch=self.vgg_out_ch)
+    def forward(self, p, c_grid, stage='middle', **kwargs):
+        # ...
+            raw = self.color_decoder(p, c_grid,\
+             p_feat = kwargs['p_feat'], cam_xyz = kwargs['cam_xyz'])
+
+```
+<!--
+        vgg16 = torchvision.models.vgg16(pretrained=True)
+        layers = []
+        for cnt, layer in enumerate(vgg16.features):
+            layers.append(layer)
+            if cnt == 15:
+                break
+        self.vgg_out_ch = 32; kernel_size = 1
+        layers += [nn.Conv2d(layers[-2].__dict__['out_channels'], self.vgg_out_ch, kernel_size, )]
+        self.vgg_sel = nn.Sequential(*layers)
+        self.data_transforms = transforms.Compose([
+                transforms.Resize(224),
+                transforms.CenterCrop(224),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            ])
+            
+        self.color_decoder = MLP(name='color', dim=dim, c_dim=c_dim, color=True,
+                                 skips=[2], n_blocks=5, hidden_size=hidden_size,
+                                 grid_len=color_grid_len, pos_embedding_method=pos_embedding_method,
+                                 vgg_out_ch=self.vgg_out_ch)
+-->
+5. forward @ class MLP(nn.Module) @ decoder.py
+```python
+    def forward(self, p, c_grid=None, p_feat=None, cam_xyz=None):
+        #...
+        if cam_xyz != None:
+            feat_sel, knn_idx, n_K = self.sample_point_feature(p, cam_xyz, p_feat)
+
+        #...
+        embedded_pts = self.embedder(p)
+        h = embedded_pts
+        for i, l in enumerate(self.pts_linears):
+            h = self.pts_linears[i](h)
+            h = F.relu(h)
+            if cam_xyz == None:
+                if self.c_dim != 0:
+                    h = h + self.fc_c[i](c)
+            else:
+                h_kk = self.fc_pc[i](feat_sel[:,0,:]).unsqueeze(1)
+                #...
+            if i in self.skips:
+                h = torch.cat([embedded_pts, h], -1)
+        out = self.output_linear(h)
+        if not self.color:
+            out = out.squeeze(-1)
+        return out
+```
+
+6. __init__ @ class MLP(nn.Module) @ decoder.py
+```python
+class MLP(nn.Module):
+    def __init__(self, name='', dim=3, c_dim=128,
+                 hidden_size=256, n_blocks=5, leaky=False, sample_mode='bilinear',
+                 color=False, skips=[2], grid_len=0.16, pos_embedding_method='fourier',
+                 concat_feature=False, vgg_out_ch=None):   
+        #...
+        if vgg_out_ch != None:
+            #...
+        self.vgg_out_ch = vgg_out_ch
+```
+7. sample_point_feature @ class MLP(nn.Module) @ decoder.py
+```python
+    def sample_point_feature(self, p_rs, p_dp, p_feat):
+        #...
+        return feat_sel, rest.idx.squeeze(0), n_K
+```
+
+8. def optimize_cam_in_batch @ Tracker.py
+```python
+        device = self.device
+        H, W, fx, fy, cx, cy = self.H, self.W, self.fx, self.fy, self.cx, self.cy
+
+        ## <---
+        intrinsic = torch.tensor([[fx, .0, cx], [.0, fy, cy], [.0, .0, 1.0]]).to()
+        int_inv = torch.inverse(intrinsic.t().cpu()).to(device)
+
+        mg_x, mg_y = torch.meshgrid(torch.arange(W), torch.arange(H),indexing='xy')
+        mg_x, mg_y = mg_x.to(device), mg_y.to(device)
+
+        self.cam_xyz = torch.stack([mg_x* gt_depth, mg_y* gt_depth, gt_depth], dim=-1)
+        self.cam_xyz = self.cam_xyz @ int_inv
+        ## --->
+```
 
 <!--
 ### NDC 좌표계로 변환
