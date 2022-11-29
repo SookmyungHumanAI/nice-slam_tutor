@@ -607,6 +607,8 @@ feat = vgg_out[0:3,...].permute((1,2,0)).cpu().detach().numpy()
 
 p_feat_img.shape, feat.shape
 ```
+![image](https://user-images.githubusercontent.com/10238769/204468949-7e7c7760-6eba-447e-886e-2ded9ddc2a59.png)
+
 ```python
 plt.figure(figsize=(12,5))
 plt.subplot(121); plt.imshow(img)
