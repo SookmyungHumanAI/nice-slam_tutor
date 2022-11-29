@@ -451,6 +451,8 @@ intrinsic = torch.tensor([[fx, .0, cx], [.0, fy, cy], [.0, .0, 1.0]]).to()
 int_inv = torch.inverse(intrinsic.t().cpu()).to(device)
 ```
 2. Load Depth Map View
+![image](https://user-images.githubusercontent.com/10238769/204456162-4b2994f5-62e3-4c18-8bfb-e683bfa6b7d5.png)
+
 ```python
 # Load Depth Map View
 mg_x, mg_y = torch.meshgrid(#..., #..., #...)
