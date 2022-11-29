@@ -526,7 +526,7 @@ knn_color = np.concatenate((knn_color, [[255,0,0]]), axis = 0)
 print_shape(knn_point, knn_color)
 knn_point, knn_color
 ```
-3. 3D plot
+3. Open3D plot
 ```python
 knn_point = torch.Tensor(np.array(knn_point)).reshape(-1,3)
 knn_color = torch.Tensor(np.array(knn_color)).reshape(-1,3)
@@ -585,15 +585,15 @@ vgg_out.shape, color_data.shape, tf_image.shape
 - F.grid_sample 이용
 ```python
 H, W = depth_data.shape
-gr_x = (torch.arange(W, dtype=torch.float32)*2 - W + 1) / W
-gr_y = (torch.arange(H, dtype=torch.float32)*2 - H + 1) / H
-gr_y, gr_x = torch.meshgrid(gr_y, gr_x)
+gr_x = # ...
+gr_y = # ...
+# ... torch.meshgrid(...
 
 import torch.nn.functional as F
 
 vgrid = torch.stack([gr_x, gr_y], dim=-1).to(device).unsqueeze(0)
 
-p_feat = F.grid_sample(vgg_out.unsqueeze(0), vgrid)
+p_feat = F.grid_sample(# ...)
 ```
 
 
