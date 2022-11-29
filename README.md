@@ -596,6 +596,18 @@ vgrid = torch.stack([gr_x, gr_y], dim=-1).to(device).unsqueeze(0)
 p_feat = F.grid_sample(# ...)
 ```
 
+### VGG Feature Visualization
+```python
+p_feat_img = p_feat[0,0:3,...].permute((1,2,0)).cpu().detach().numpy()
+feat = vgg_out[0:3,...].permute((1,2,0)).cpu().detach().numpy()
+
+p_feat_img.shape, feat.shape
+```
+```python
+plt.figure(figsize=(12,5))
+plt.subplot(121); plt.imshow(img)
+plt.subplot(122); plt.imshow(feat)
+```
 
 
 <!--
