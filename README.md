@@ -188,7 +188,7 @@ summary(decoder, input_data = [pi, c])
 > - 코드 및 결과 정리한 PPT 파일 제출 (수업시간에 코드 확인)
 
 # 2022-11-29 Class
-## Depth map를 이용해서 point cloud 만들기
+## 지난시간 복습
 1. pytorch3d & nice-slam install
 ```python
 # pytorch3d install
@@ -440,66 +440,103 @@ decoder.fine_decoder.bound = self.bound
 ret = decoder(pi, c_grid=c, stage=stage)
 ret.shape
 ```
-
-### Load instrinsic
-```
-@ src/NICE_SLAM.py
-```
+## Depth map를 이용해서 point cloud 만들기
+1. Load instrinsic
 ```python
-import numpy as np
-
+@ src/NICE_SLAM.py
+# Load Intrinsic
 H, W, fx, fy, cx, cy = self.H, self.W, self.fx, self.fy, self.cx, self.cy
 
-intrinsic = torch.from_numpy(
-    np.array([[fx, .0, cx], [.0, fy, cy],
-              [.0, .0, 1.0]]).reshape(3, 3))
-print(intrinsic)
+intrinsic = torch.tensor([[fx, .0, cx], [.0, fy, cy], [.0, .0, 1.0]]).to()
+int_inv = torch.inverse(intrinsic.t().cpu()).to(device)
 ```
-### Load Depth Map View
+2. Load Depth Map View
 ```python
-depth_data = gt_depth
+# Load Depth Map View
+mg_x, mg_y = torch.meshgrid(#..., #..., #...)
+mg_x, mg_y = mg_x.to(device), mg_y.to(device)
 
-far, near = depth_data.max(), depth_data.min() 
-print(f'far, near: {far}, {near}')
-
-H, W = depth_data.shape
-valid_z = depth_data
-valid_z = (valid_z-near)/(far-near)
-valid_x = torch.arange(W, dtype=torch.float32) / (W - 1)
-valid_y = torch.arange(H, dtype=torch.float32) / (H - 1)
-valid_y, valid_x = torch.meshgrid(valid_y, valid_x)
-valid_x.shape, valid_y.shape, valid_z.shape
+# Depth Point Cloud 
+cam_xyz = torch.stack([mg_x* depth_data, mg_y* depth_data, depth_data], dim=-1)
+cam_xyz = # ... #
+cam_xyz.shape, color_data.shape
 ```
-### NDC 좌표계로 변환
+
+3. Depth point cloud 좌표계를 camera 에서 world로 변환
+```
+# Convert depth point cloud coordinate from camera to world
+p_dp = cam_xyz.to(torch.float32).reshape(-1,3)
+
+#...
+p_rs = pointsf.to(torch.float32)
+```
+
+## Point Cloud 시각화
+1. sampling ray point
 ```python
-valid_x, valid_y = valid_x.to(device), valid_y.to(device)
-intrinsic = intrinsic.to(device)
-
-ndc_xyz = torch.stack([valid_x, valid_y, valid_z], dim=-1)
-
-H, W = depth_data.shape
-inv_scale = torch.tensor([[W - 1, H - 1]], device=ndc_xyz.device)
-cam_z = ndc_xyz[..., 2:3] * (far-near) + near 
-cam_xy = ndc_xyz[..., :2] * inv_scale * cam_z 
-cam_xyz = torch.cat([cam_xy, cam_z], dim=-1)  
-print(cam_xyz.shape, cam_xyz.max(), cam_xyz.min(), cam_xyz.dtype)
-
-cam_xyz = cam_xyz @ torch.inverse(intrinsic.t()).to(torch.float32)
-print(cam_xyz.shape, cam_xyz.max(), cam_xyz.min(), cam_xyz.dtype)
-```
-### Point Cloud 시각화
-```
 import open3d as o3d
 
-points = cam_xyz.reshape(-1,3).cpu()
+ray_sampling = o3d.geometry.PointCloud()
+ray_sampling.points = o3d.utility.Vector3dVector(p_rs.cpu())
+ray_sampling_color = torch.zeros_like(p_rs.cpu().detach()) + torch.Tensor((0,176,0))
+ray_sampling.colors = o3d.utility.Vector3dVector(ray_sampling_color)
+ray_sampling = ray_sampling.voxel_down_sample(voxel_size=0.2)
+```
+2. depth point cloud
+```python
+total_pt = o3d.geometry.PointCloud()
+total_pt.points = o3d.utility.Vector3dVector(p_dp.cpu())
 
-pcd2 = o3d.geometry.PointCloud()
-pcd2.points = o3d.utility.Vector3dVector(points)
-pcd2.colors = o3d.utility.Vector3dVector(gt_color.cpu().reshape(-1,3))
+total_pt_color = gt_color.cpu().reshape(-1,3)
+total_pt.colors = o3d.utility.Vector3dVector(total_pt_color)
+total_pt = total_pt.voxel_down_sample(voxel_size=0.05)
 
-o3d.visualization.draw_plotly([pcd2]) 
+o3d.visualization.draw_plotly([total_pt, ray_sampling]) 
 ```
 
+## kNN Point sampling
+1. kNN of depth point cloud for sampling ray
+```python
+from pytorch3d.ops.knn import knn_points
+import time
+
+print_shape(p_rs,p_dp)
+
+s = time.time()
+rest = knn_points(p_rs.unsqueeze(0), p_dp.unsqueeze(0), K = 8)
+
+torch.cuda.synchronize()
+print(f"Time: {time.time() - s} seconds")
+```
+2. Visualize one of kNNs
+```python
+import numpy as np
+# kNN of depth point cloud
+rand_idx = 9904 
+knn_idx = rest.idx[0,rand_idx]
+knn_point= p_dp[knn_idx].cpu().detach().numpy()
+knn_color = np.tile([0,0,255],(knn_point.shape[0],1))
+# ray sampling point
+knn_probe = p_rs[rand_idx].cpu().detach().numpy()
+knn_probe = knn_probe[None,...]
+
+knn_point = np.concatenate((knn_point, knn_probe),axis = 0)
+knn_color = np.concatenate((knn_color, [[255,0,0]]), axis = 0)
+
+print_shape(knn_point, knn_color)
+knn_point, knn_color
+```
+3. 3D plot
+```python
+knn_point = torch.Tensor(np.array(knn_point)).reshape(-1,3)
+knn_color = torch.Tensor(np.array(knn_color)).reshape(-1,3)
+
+k_querying = o3d.geometry.PointCloud()
+k_querying.points = o3d.utility.Vector3dVector(knn_point)
+k_querying.colors = o3d.utility.Vector3dVector(knn_color)
+
+o3d.visualization.draw_plotly([total_pt, k_querying])
+```
 
 ## Pretrained Model (vgg) 잘라서 가지고 오기
 ### VGG Pretrained Model
@@ -560,6 +597,28 @@ vgg_out.shape, color_data.shape, tf_image.shape
 ```
 ### VGG Feature를 (32,32)에서 (H,W)로 Interpolation
 F.grid_sample 이용
+
+
+<!--
+### NDC 좌표계로 변환
+```python
+valid_x, valid_y = valid_x.to(device), valid_y.to(device)
+intrinsic = intrinsic.to(device)
+
+ndc_xyz = torch.stack([valid_x, valid_y, valid_z], dim=-1)
+
+H, W = depth_data.shape
+inv_scale = torch.tensor([[W - 1, H - 1]], device=ndc_xyz.device)
+cam_z = ndc_xyz[..., 2:3] * (far-near) + near 
+cam_xy = ndc_xyz[..., :2] * inv_scale * cam_z 
+cam_xyz = torch.cat([cam_xy, cam_z], dim=-1)  
+print(cam_xyz.shape, cam_xyz.max(), cam_xyz.min(), cam_xyz.dtype)
+
+cam_xyz = cam_xyz @ torch.inverse(intrinsic.t()).to(torch.float32)
+print(cam_xyz.shape, cam_xyz.max(), cam_xyz.min(), cam_xyz.dtype)
+```
+-->
+
 
 
 <!-- PROJECT LOGO -->
