@@ -618,6 +618,10 @@ plt.subplot(122); plt.imshow(feat)
 ## src code modification
 1. Test with render batch ray
 ```python
+%load_ext autoreload
+%autoreload 2
+```
+```python
 from src.NICE_SLAM import NICE_SLAM
 self = NICE_SLAM(cfg, args)
 self.tracker.c = {}  # self.tracker.prev_mapping_idx += 1
