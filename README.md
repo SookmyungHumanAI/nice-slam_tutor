@@ -761,6 +761,14 @@ class MLP(nn.Module):
         self.cam_xyz = self.cam_xyz @ int_inv
         ## --->
 ```
+```python
+        # ret = self.renderer.render_batch_ray(
+        #     self.c, self.decoders, batch_rays_d, batch_rays_o,  self.device, stage='color',  gt_depth=batch_gt_depth)
+        ret = self.renderer.render_batch_ray(
+            self.c, self.decoders, batch_rays_d, batch_rays_o,
+            self.device, stage='color',  gt_depth=batch_gt_depth,
+            color_data=gt_color, cam_xyz = self.cam_xyz)
+```
 
 <!--
 ### NDC 좌표계로 변환
