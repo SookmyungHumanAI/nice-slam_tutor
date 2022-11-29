@@ -646,7 +646,7 @@ depth, uncertainty, color = ret
         p_feat = torch.nn.functional.grid_sample(p_feat.unsqueeze(0), vgrid)
         _, n_c, _, _ = p_feat.shape
         self.p_feat = p_feat.squeeze().permute((1,2,0)).view(-1,n_c)
-        # --->
+        # --
 ```
 -->
 3. eval_points @ Renderer.py
