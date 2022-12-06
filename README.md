@@ -614,6 +614,23 @@ plt.figure(figsize=(12,5))
 plt.subplot(121); plt.imshow(img)
 plt.subplot(122); plt.imshow(feat)
 ```
+## Visualizer & Mapper
+
+```python
+# visualizer
+self.tracker.visualizer.vis(
+    7000, 25, depth_data, gt_color, gt_c2w, self2.tracker.c,
+        self2.tracker.decoders) # *임의의 index, iteration #
+
+# mapper
+lr_factor = cfg['mapping']['lr_first_factor']
+num_joint_iters = cfg['mapping']['iters_first']
+idx = 0
+cur_c2w = c2w
+
+self.mapper.optimize_map(num_joint_iters, lr_factor, idx, color_data, depth_data,
+                            gt_c2w, self.mapper.keyframe_dict, self.mapper.keyframe_list, cur_c2w=cur_c2w)
+```        
 
 ## src code modification
 1. Test with render batch ray
