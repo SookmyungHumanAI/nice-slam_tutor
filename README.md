@@ -617,6 +617,12 @@ plt.subplot(122); plt.imshow(feat)
 ## Visualizer & Mapper
 
 ```python
+# init
+from src.NICE_SLAM import NICE_SLAM
+self = NICE_SLAM(cfg, args)
+self.tracker.c = {}  # self.tracker.prev_mapping_idx += 1
+self.tracker.update_para_from_mapping()
+
 # visualizer
 self.tracker.visualizer.vis(
     7000, 25, depth_data, gt_color, gt_c2w, self.tracker.c,
