@@ -619,8 +619,8 @@ plt.subplot(122); plt.imshow(feat)
 ```python
 # visualizer
 self.tracker.visualizer.vis(
-    7000, 25, depth_data, gt_color, gt_c2w, self2.tracker.c,
-        self2.tracker.decoders) # *임의의 index, iteration #
+    7000, 25, depth_data, gt_color, gt_c2w, self.tracker.c,
+        self.tracker.decoders) # *임의의 index, iteration #
 
 # mapper
 lr_factor = cfg['mapping']['lr_first_factor']
