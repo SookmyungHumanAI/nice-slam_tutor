@@ -657,11 +657,145 @@ ret = self.renderer.render_batch_ray(
      color_data=color_data, cam_xyz = self.cam_xyz)
 depth, uncertainty, color = ret
 ```
+
 2. render_batch_ray @ Renderer.py
+- 아래 render_batch_ray 함수에 arguments 추가: color_data, npc 
+
 ```python
-    def render_batch_ray(self, c, decoders, rays_d, rays_o, device, stage, gt_depth=None, color_data=None, cam_xyz = None):
+    def render_batch_ray(self, c, decoders, rays_d, rays_o, device, stage,
+         gt_depth=None, color_data=None, npc=None):
+        """
+        Render color, depth and uncertainty of a batch of rays.
+
+        Args:
+            c (dict): feature grids.
+            decoders (nn.module): decoders.
+            rays_d (tensor, N*3): rays direction.
+            rays_o (tensor, N*3): rays origin.
+            device (str): device name to compute on.
+            stage (str): query stage.
+            gt_depth (tensor, optional): sensor depth image. Defaults to None.
+            color_data (tensor: H, W, 3): current frame color data
+            npc (class Neural_Point_Cloud): class for methods and attribute for neural point cloud
+
+        Returns:
+            depth (tensor): rendered depth.
+            uncertainty (tensor): rendered uncertainty.
+            color (tensor): rendered color.
+        """
     # ...
 ```
+
+- class Neural_Point_Cloud 정의
+```python
+from pytorch3d.ops.knn import knn_points
+import torch.nn.functional as F
+import torch
+
+class Neural_Point_Cloud():
+    ""
+    Neural Point Cloud Manager.
+    ""
+    def __init__(self, cfg, args, slam) -> None:
+        device = slam.device
+        self.H, self.W, self.fx, self.fy, self.cx, self.cy = slam.H, slam.W, slam.fx, slam.fy, slam.cx, slam.cy
+        self.K = 8
+        
+    def depth2pcd(self, depth_data, gt_c2w):
+        '''
+        1. Convert depth map to point cloud data
+        2. Transform the point cloud from camera coordinate to world coordinate.
+        
+        Args:
+            depth_data (tensor: H, W): depth data
+            gt_c2w (tensor: 4, 4): gt camera pose from        
+        '''
+        
+        H, W, fx, fy, cx, cy = self.H, self.W, self.fx, self.fy, self.cx, self.cy
+        # Get intrinsic 
+        ## --->
+        intrinsic = torch.tensor([[fx, .0, cx], [.0, fy, cy], [.0, .0, 1.0]]).to(self.device)
+        int_inv = torch.inverse(intrinsic.t()).to(torch.float32)
+        # intrinsic = torch.tensor([[fx, .0, cx], [.0, fy, cy], [.0, .0, 1.0]])
+        # int_inv = torch.inverse(intrinsic.t().cpu()).to(device)
+
+        # Convert Depth to XYZ in camera coordinate
+        ## --->
+        mg_x, mg_y = torch.meshgrid(torch.arange(W), torch.arange(H),indexing='xy')
+        mg_x, mg_y = mg_x.to(device), mg_y.to(device)
+
+        pcd = torch.stack([mg_x* depth_data, mg_y* depth_data, depth_data], dim=-1)
+        pcd = pcd @ int_inv
+        
+        # Change to world coordinate
+        ## --->
+        pcd = pcd.reshape(-1,3)
+        gt_c2w = gt_c2w.to(torch.float32)
+        pcd = pcd @ (gt_c2w[:3,:3].t()) - gt_c2w[:3,-1]
+        pcd = -pcd
+        
+        return pcd
+        
+    def feature_embedding(self, color_data, decoders):
+        '''
+        1. Get features from color data
+        2. interpoltate feature interpolation
+        
+        Args:
+            color_data (H, W, 3)
+            decoders (class NICE(nn.Module))
+        '''
+        H, W, C = color_data.shape
+        device = self.device
+        
+        # decoders.data_transforms와 decoders.feature_net 이용해서 feature 추출
+        ## --->
+        # data transform from decoders' feature embedding
+        pts_feat = decoders.data_transforms(color_data.permute((2,0,1))).to(torch.float32)
+        
+        # feature embedding from decoder's feature embedding model
+        pts_feat = decoders.feature_net(pts_feat)
+        
+        # color image의 H, W에 맞게 interpolation
+        H, W, C = color_dat.shape
+        gr_x = (torch.arange(W)*2. - W + 1) / W
+        gr_y = (torch.arange(H)*2. - H + 1) / H
+        gr_y, gr_x = torch.meshgrid(gr_y, gr_x)
+        vgrid = torch.stack([gr_x, gr_y], dim=-1).unsqueeze(0).to(device)
+
+        pts_feat = torch.nn.functional.grid_sample(pts_feat.unsqueeze(0), vgrid)
+        b, n_c, h, w = pts_feat.shape
+        pts_feat = pts_feat.view(n_c, -1).t()
+        
+        return pts_feat
+
+    def k_sample_point_querying(self, p_rs, p_dp, pts_feat):
+        '''
+        pytorch3d의 kNN을 이용해서 K개의 points의 index를 query sampling함
+        Args:
+            p_rs: points of ray sampling (1, 48000, 3)
+            p_dp: points of depth point clouds (pixel #, 3)
+            pts_feat: point features for depth point clouds (pixel #, channel #)
+        '''
+        p_rs = p_rs.reshape(-1,3).unsqueeze(0) # ray sampling point
+        p_dp = p_dp.reshape(-1,3).unsqueeze(0).to(self.device).double()
+        knn_rst = knn_points(p_rs, p_dp, K = self.K)
+        
+        knn_feat = pts_feat[knn_rst.idx,:] # knn_rst.idx = 1, 48000, 8 // pst_feat = 48000, ch # // feat_sel = 1, 48000, 8, ch #
+        knn_feat = knn_feat.squeeze(0) # -> (48000, 8, ch #)
+
+        p_dp_sel = p_dp[knn_rst.idx,:] # (pixel #, 3) -> 1, 48000, 8, ch #
+        p_dp_sel = p_dp_sel.squeeze(0) # (48000, 8, 3)
+
+        delta_p = p_dp_sel - p_rs.squeeze(0).unsqueeze(1) # (48000, 8, 3) - (48000, 1, 3)
+        dist = torch.norm(delta_p, dim=-1, keepdim=True) # (48000, 8, 1)
+        # knn_feat = torch.cat((delta_p, knn_feat/dist), axis = -1) # (48000, 8, 3 + ch#)
+        knn_feat = torch.cat((delta_p, knn_feat), axis = -1) # (48000, 8, 3 + ch#)
+
+        return knn_feat, knn_rst.idx.squeeze(0) # (48000, 8, 3 + ch#), (48000, 8)
+        
+```
+
 <!--
 ```python
     def render_batch_ray(self, c, decoders, rays_d, rays_o, device, stage, gt_depth=None, color_data=None, cam_xyz = None):
